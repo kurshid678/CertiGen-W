@@ -14,16 +14,16 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType)
 
 export const useAuth = () => useContext(AuthContext)
 
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+
   const clearAuthState = () => {
     setUser(null);
-    setSession(null);
     // Clear any stored auth tokens
     localStorage.removeItem('supabase.auth.token');
     sessionStorage.removeItem('supabase.auth.token');
   };
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -36,7 +36,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // If there's an auth error, clear any stored tokens
           clearAuthState();
         } else {
-          setSession(session);
           setUser(session?.user ?? null);
         }
       } catch (error) {
@@ -48,8 +47,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     initializeAuth();
+    
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESHED') {
+        console.log('Token refreshed successfully');
+      }
+      
+      if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+        clearAuthState();
+        return;
+      }
+
       setUser(session?.user ?? null)
       setLoading(false)
     })
@@ -68,17 +77,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const logout = async () => {
-      if (event === 'TOKEN_REFRESHED') {
-        console.log('Token refreshed successfully');
-      }
-      
-      if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-        clearAuthState();
-        return;
-      }
-
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+    } catch (error) {
+      console.error('Sign out error:', error);
+    } finally {
+      // Always clear local state regardless of API call success
+      clearAuthState();
+    }
   }
 
   const value = {
@@ -86,14 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     login,
     signup,
     logout,
-    try {
     loading
-    } catch (error) {
-      console.error('Sign out error:', error);
-    } finally {
-      // Always clear local state regardless of API call success
-      clearAuthState();
-    }
   }
 
   return (
