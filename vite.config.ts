@@ -9,7 +9,7 @@ export default defineConfig({
     global: 'window',
     Buffer: Buffer,
     'process.env': JSON.stringify({
-      GOOGLE_SDK_NODE_LOGGING: undefined,
+      GOOGLE_SDK_NODE_LOGGING: false,
     }),
     'process.stdout': JSON.stringify({}),
     'process.stderr': JSON.stringify({}),
