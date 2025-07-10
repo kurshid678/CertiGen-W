@@ -1,10 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { googleSheetsService, Template } from '../lib/googleSheets'
+import { supabase } from '../lib/supabase'
 import { ArrowLeft, Search, Download, FileText, Trash2, AlertTriangle } from 'lucide-react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
+
+interface Template {
+  id: string
+  name: string
+  canvas_data: any
+  excel_data: any
+  created_at: string
+}
 
 const CertificateGenerator: React.FC = () => {
   const { user } = useAuth()
@@ -29,8 +37,14 @@ const CertificateGenerator: React.FC = () => {
     if (!user) return
     
     try {
-      const data = await googleSheetsService.getTemplates(user.id)
-      setTemplates(data)
+      const { data, error } = await supabase
+        .from('templates')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setTemplates(data || [])
     } catch (error) {
       console.error('Error fetching templates:', error)
     } finally {
@@ -42,14 +56,14 @@ const CertificateGenerator: React.FC = () => {
     setSelectedTemplate(template)
     
     // Set up Excel data
-    const excelData = template.excelData?.data || []
+    const excelData = template.excel_data?.data || []
     setFilteredData(excelData)
     setShowSearchResults(false)
     setSearchTerm('')
     
     // Initialize field values with default text from template elements
     const initialValues: Record<string, string> = {}
-    template.canvasData?.elements?.forEach((element: any) => {
+    template.canvas_data?.elements?.forEach((element: any) => {
       initialValues[`element_${element.id}`] = element.text || ''
     })
     setFieldValues(initialValues)
@@ -57,14 +71,14 @@ const CertificateGenerator: React.FC = () => {
 
   const handleSearch = (term: string) => {
     setSearchTerm(term)
-    if (!selectedTemplate?.excelData?.data) return
+    if (!selectedTemplate?.excel_data?.data) return
 
     if (term.trim() === '') {
       setShowSearchResults(false)
       return
     }
 
-    const filtered = selectedTemplate.excelData.data.filter((row: any[]) =>
+    const filtered = selectedTemplate.excel_data.data.filter((row: any[]) =>
       row.some((cell: any) =>
         cell?.toString().toLowerCase().includes(term.toLowerCase())
       )
@@ -77,9 +91,9 @@ const CertificateGenerator: React.FC = () => {
     const values: Record<string, string> = { ...fieldValues }
     
     // Update element fields if they have mapped columns
-    selectedTemplate?.canvasData?.elements?.forEach((element: any) => {
-      if (element.mappedColumn && selectedTemplate.excelData?.columns) {
-        const columnIndex = selectedTemplate.excelData.columns.indexOf(element.mappedColumn)
+    selectedTemplate?.canvas_data?.elements?.forEach((element: any) => {
+      if (element.mappedColumn && selectedTemplate.excel_data?.columns) {
+        const columnIndex = selectedTemplate.excel_data.columns.indexOf(element.mappedColumn)
         if (columnIndex !== -1 && row[columnIndex]) {
           values[`element_${element.id}`] = row[columnIndex].toString()
         }
@@ -103,7 +117,14 @@ const CertificateGenerator: React.FC = () => {
     
     setDeleting(true)
     try {
-      await googleSheetsService.deleteTemplate(templateId, user.id)
+      const { error } = await supabase
+        .from('templates')
+        .delete()
+        .eq('id', templateId)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+      
       setTemplates(prev => prev.filter(t => t.id !== templateId))
       setDeleteConfirm(null)
       
@@ -125,7 +146,7 @@ const CertificateGenerator: React.FC = () => {
     try {
       const canvas = await html2canvas(certificateRef.current, {
         scale: 2,
-        backgroundColor: selectedTemplate?.canvasData?.backgroundColor || '#ffffff',
+        backgroundColor: selectedTemplate?.canvas_data?.backgroundColor || '#ffffff',
         useCORS: true,
         allowTaint: true
       })
@@ -251,7 +272,7 @@ const CertificateGenerator: React.FC = () => {
                         </button>
                       </div>
                       <p className="text-gray-600 mb-4">
-                        Created: {new Date(template.createdAt).toLocaleDateString()}
+                        Created: {new Date(template.created_at).toLocaleDateString()}
                       </p>
                       <div 
                         onClick={() => handleTemplateSelect(template)}
@@ -283,7 +304,7 @@ const CertificateGenerator: React.FC = () => {
             </div>
 
             {/* Search Bar - Only show if template has Excel data */}
-            {selectedTemplate.excelData?.data && selectedTemplate.excelData.data.length > 0 && (
+            {selectedTemplate.excel_data?.data && selectedTemplate.excel_data.data.length > 0 && (
               <div className="bg-white rounded-xl shadow-lg p-6 relative">
                 <div className="flex items-center gap-4">
                   <Search className="text-gray-400" size={20} />
@@ -302,7 +323,7 @@ const CertificateGenerator: React.FC = () => {
                     <table className="w-full">
                       <thead>
                         <tr className="bg-gray-50 border-b">
-                          {selectedTemplate.excelData?.columns?.map((column: string, index: number) => (
+                          {selectedTemplate.excel_data?.columns?.map((column: string, index: number) => (
                             <th key={index} className="px-4 py-2 text-left text-sm font-medium text-gray-900">
                               {column}
                             </th>
@@ -341,18 +362,18 @@ const CertificateGenerator: React.FC = () => {
                 <div
                   className="relative shadow-lg border border-gray-200"
                   style={{
-                    width: (selectedTemplate.canvasData?.width || 800) * 0.6,
-                    height: (selectedTemplate.canvasData?.height || 600) * 0.6,
-                    backgroundColor: selectedTemplate.canvasData?.backgroundColor || '#ffffff',
-                    backgroundImage: selectedTemplate.canvasData?.backgroundImage 
-                      ? `url(${selectedTemplate.canvasData.backgroundImage})` 
+                    width: (selectedTemplate.canvas_data?.width || 800) * 0.6,
+                    height: (selectedTemplate.canvas_data?.height || 600) * 0.6,
+                    backgroundColor: selectedTemplate.canvas_data?.backgroundColor || '#ffffff',
+                    backgroundImage: selectedTemplate.canvas_data?.backgroundImage 
+                      ? `url(${selectedTemplate.canvas_data.backgroundImage})` 
                       : undefined,
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
                     backgroundRepeat: 'no-repeat'
                   }}
                 >
-                  {selectedTemplate.canvasData?.elements?.map((element: any, index: number) => {
+                  {selectedTemplate.canvas_data?.elements?.map((element: any, index: number) => {
                     const displayText = fieldValues[`element_${element.id}`] || element.text || '';
 
                     return (
@@ -430,18 +451,18 @@ const CertificateGenerator: React.FC = () => {
                 ref={certificateRef}
                 className="relative"
                 style={{
-                  width: selectedTemplate.canvasData?.width || 800,
-                  height: selectedTemplate.canvasData?.height || 600,
-                  backgroundColor: selectedTemplate.canvasData?.backgroundColor || '#ffffff',
-                  backgroundImage: selectedTemplate.canvasData?.backgroundImage 
-                    ? `url(${selectedTemplate.canvasData.backgroundImage})` 
+                  width: selectedTemplate.canvas_data?.width || 800,
+                  height: selectedTemplate.canvas_data?.height || 600,
+                  backgroundColor: selectedTemplate.canvas_data?.backgroundColor || '#ffffff',
+                  backgroundImage: selectedTemplate.canvas_data?.backgroundImage 
+                    ? `url(${selectedTemplate.canvas_data.backgroundImage})` 
                     : undefined,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
                   backgroundRepeat: 'no-repeat'
                 }}
               >
-                {selectedTemplate.canvasData?.elements?.map((element: any, index: number) => {
+                {selectedTemplate.canvas_data?.elements?.map((element: any, index: number) => {
                   const displayText = fieldValues[`element_${element.id}`] || element.text || '';
 
                   return (

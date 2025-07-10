@@ -35,10 +35,6 @@ const AppContent: React.FC = () => {
           element={user ? <Navigate to="/dashboard" replace /> : <AuthForm />} 
         />
         <Route 
-          path="/auth/callback" 
-          element={<AuthForm />} 
-        />
-        <Route 
           path="/dashboard" 
           element={
             <ProtectedRoute>

@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { googleSheetsService } from '../lib/googleSheets'
+import { supabase } from '../lib/supabase'
 import { ArrowLeft, Save, Upload, Plus, Type, Image, Trash2, FileSpreadsheet, ChevronDown } from 'lucide-react'
 import Draggable from 'react-draggable'
 import * as XLSX from 'xlsx'
@@ -172,12 +172,16 @@ const TemplateCreator: React.FC = () => {
 
     setSaving(true)
     try {
-      await googleSheetsService.createTemplate({
-        userId: user.id,
-        name: templateName,
-        canvasData: canvasData,
-        excelData: { columns: excelColumns, data: excelData, selectedSheet }
-      })
+      const { error } = await supabase
+        .from('templates')
+        .insert({
+          user_id: user.id,
+          name: templateName,
+          canvas_data: canvasData,
+          excel_data: { columns: excelColumns, data: excelData, selectedSheet }
+        })
+
+      if (error) throw error
       
       alert('Template saved successfully!')
       navigate('/dashboard')

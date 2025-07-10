@@ -1,7 +1,7 @@
 import React from 'react'
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { googleSheetsService } from '../lib/googleSheets'
+import { supabase } from '../lib/supabase'
 import { FileText, Download, LogOut, User, Plus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -24,16 +24,20 @@ const Dashboard: React.FC = () => {
     
     try {
       // Get templates count
-      const templates = await googleSheetsService.getTemplates(user.id)
-      const templatesCount = templates.length
+      const { count: templatesCount, error: templatesError } = await supabase
+        .from('templates')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+
+      if (templatesError) throw templatesError
 
       // For now, we'll calculate certificates generated and downloads based on templates
-      // In a real app, you'd track these separately
-      const certificatesGenerated = templatesCount * 5 // Estimate
-      const totalDownloads = templatesCount * 12 // Estimate
+      // In a real app, you'd track these separately in the database
+      const certificatesGenerated = (templatesCount || 0) * 5 // Estimate
+      const totalDownloads = (templatesCount || 0) * 12 // Estimate
 
       setStats({
-        templatesCreated: templatesCount,
+        templatesCreated: templatesCount || 0,
         certificatesGenerated,
         totalDownloads
       })
@@ -69,18 +73,11 @@ const Dashboard: React.FC = () => {
               <h1 className="text-2xl font-bold text-gray-900">Certificate Generator</h1>
             </div>
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3 px-4 py-2 bg-gray-100 rounded-lg">
-                {user?.picture && (
-                  <img 
-                    src={user.picture} 
-                    alt={user.name} 
-                    className="w-8 h-8 rounded-full"
-                  />
-                )}
-                <div className="text-left">
-                  <div className="text-sm font-medium text-gray-900">{user?.name}</div>
-                  <div className="text-xs text-gray-600">{user?.email}</div>
-                </div>
+              <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg">
+                <User size={18} className="text-gray-600" />
+                <span className="text-sm font-medium text-gray-700">
+                  {user?.email}
+                </span>
               </div>
               <button
                 onClick={handleLogout}
@@ -97,7 +94,7 @@ const Dashboard: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome to your Dashboard</h2>
-          <p className="text-gray-600">Create and manage your certificate templates with Google Sheets integration</p>
+          <p className="text-gray-600">Create and manage your certificate templates</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
