@@ -8,10 +8,11 @@ export default defineConfig({
   define: {
     global: 'window',
     Buffer: Buffer,
-    'process.env': {},
-    'process.env.GOOGLE_SDK_NODE_LOGGING': '{}',
-    'process.stdout': {},
-    'process.stderr': {},
+    process: {
+      env: {},
+      stdout: {},
+      stderr: {},
+    },
   },
   optimizeDeps: {
     exclude: ['lucide-react'],
