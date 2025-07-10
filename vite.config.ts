@@ -9,7 +9,9 @@ export default defineConfig({
     global: 'window',
     Buffer: Buffer,
     process: {
-      env: {},
+      env: {
+        GOOGLE_SDK_NODE_LOGGING: undefined,
+      },
       stdout: {},
       stderr: {},
     },
