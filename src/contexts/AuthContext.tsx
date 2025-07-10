@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { User } from '@supabase/supabase-js'
+import type { User, Session } from '@supabase/supabase-js'
 
 interface AuthContextType {
   user: User | null
@@ -16,10 +16,12 @@ export const useAuth = () => useContext(AuthContext)
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
+  const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
 
   const clearAuthState = () => {
     setUser(null);
+    setSession(null);
     // Clear any stored auth tokens
     localStorage.removeItem('supabase.auth.token');
     sessionStorage.removeItem('supabase.auth.token');
@@ -36,6 +38,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // If there's an auth error, clear any stored tokens
           clearAuthState();
         } else {
+          setSession(session);
           setUser(session?.user ?? null);
         }
       } catch (error) {
@@ -59,8 +62,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      setUser(session?.user ?? null)
-      setLoading(false)
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
     })
 
     return () => subscription.unsubscribe()
