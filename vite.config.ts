@@ -10,7 +10,7 @@ export default defineConfig({
     Buffer: Buffer,
     process: {
       env: {
-        GOOGLE_SDK_NODE_LOGGING: undefined,
+        GOOGLE_SDK_NODE_LOGGING: {},
       },
       stdout: {},
       stderr: {},
