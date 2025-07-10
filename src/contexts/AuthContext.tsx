@@ -1,13 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
-import type { User, Session } from '@supabase/supabase-js'
+import { googleSheetsService, GoogleUser } from '../lib/googleSheets'
 
 interface AuthContextType {
-  user: User | null
-  login: (email: string, password: string) => Promise<void>
-  signup: (email: string, password: string) => Promise<void>
+  user: GoogleUser | null
+  login: () => void
   logout: () => Promise<void>
   loading: boolean
+  handleAuthCallback: (code: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType)
@@ -15,89 +14,65 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType)
 export const useAuth = () => useContext(AuthContext)
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null)
-  const [session, setSession] = useState<Session | null>(null)
+  const [user, setUser] = useState<GoogleUser | null>(null)
   const [loading, setLoading] = useState(true)
-
-  const clearAuthState = () => {
-    setUser(null);
-    setSession(null);
-    // Clear any stored auth tokens
-    localStorage.removeItem('supabase.auth.token');
-    sessionStorage.removeItem('supabase.auth.token');
-  };
 
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        // Get initial session
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.warn('Auth session error:', error.message);
-          // If there's an auth error, clear any stored tokens
-          clearAuthState();
-        } else {
-          setSession(session);
-          setUser(session?.user ?? null);
+        const restoredUser = await googleSheetsService.restoreSession()
+        if (restoredUser) {
+          setUser(restoredUser)
+          // Initialize spreadsheet for the user
+          await googleSheetsService.initializeSpreadsheet()
         }
       } catch (error) {
-        console.error('Failed to initialize auth:', error);
-        clearAuthState();
+        console.error('Failed to restore session:', error)
+        googleSheetsService.clearSession()
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
+    }
 
-    initializeAuth();
-    
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'TOKEN_REFRESHED') {
-        console.log('Token refreshed successfully');
-      }
-      
-      if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-        clearAuthState();
-        return;
-      }
-
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    })
-
-    return () => subscription.unsubscribe()
+    initializeAuth()
   }, [])
 
-  const login = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
+  const login = () => {
+    const authUrl = googleSheetsService.getAuthUrl()
+    window.location.href = authUrl
   }
 
-  const signup = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password })
-    if (error) throw error
+  const handleAuthCallback = async (code: string) => {
+    try {
+      setLoading(true)
+      const user = await googleSheetsService.handleAuthCallback(code)
+      setUser(user)
+      
+      // Initialize spreadsheet for the new user
+      await googleSheetsService.initializeSpreadsheet()
+    } catch (error) {
+      console.error('Auth callback error:', error)
+      throw error
+    } finally {
+      setLoading(false)
+    }
   }
 
   const logout = async () => {
     try {
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
+      googleSheetsService.clearSession()
+      setUser(null)
     } catch (error) {
-      console.error('Sign out error:', error);
-    } finally {
-      // Always clear local state regardless of API call success
-      clearAuthState();
+      console.error('Logout error:', error)
     }
   }
 
   const value = {
     user,
     login,
-    signup,
     logout,
-    loading
+    loading,
+    handleAuthCallback
   }
 
   return (

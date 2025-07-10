@@ -1,10 +1,9 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { googleSheetsService } from '../lib/googleSheets'
 import { ArrowLeft, Save, Upload, Plus, Type, Image, Trash2, FileSpreadsheet, ChevronDown } from 'lucide-react'
 import Draggable from 'react-draggable'
-import { ResizableBox } from 'react-resizable'
 import * as XLSX from 'xlsx'
 
 interface TextElement {
@@ -51,8 +50,6 @@ const TemplateCreator: React.FC = () => {
   const [excelColumns, setExcelColumns] = useState<string[]>([])
   const [availableSheets, setAvailableSheets] = useState<ExcelSheet[]>([])
   const [selectedSheet, setSelectedSheet] = useState<string>('')
-  const [showSheetSelector, setShowSheetSelector] = useState(false)
-  const [excelWorkbook, setExcelWorkbook] = useState<XLSX.WorkBook | null>(null)
   const [saving, setSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const bgImageInputRef = useRef<HTMLInputElement>(null)
@@ -114,7 +111,6 @@ const TemplateCreator: React.FC = () => {
     reader.onload = (e) => {
       const data = e.target?.result
       const workbook = XLSX.read(data, { type: 'binary' })
-      setExcelWorkbook(workbook)
       
       // Process all sheets
       const sheets: ExcelSheet[] = []
@@ -134,9 +130,6 @@ const TemplateCreator: React.FC = () => {
       // If only one sheet, auto-select it
       if (sheets.length === 1) {
         selectSheet(sheets[0].name)
-      } else if (sheets.length > 1) {
-        // Show sheet selector
-        setShowSheetSelector(true)
       }
     }
     reader.readAsBinaryString(file)
@@ -148,7 +141,6 @@ const TemplateCreator: React.FC = () => {
       setSelectedSheet(sheetName)
       setExcelColumns(sheet.columns)
       setExcelData(sheet.data)
-      setShowSheetSelector(false)
     }
   }
 
@@ -173,18 +165,19 @@ const TemplateCreator: React.FC = () => {
       return
     }
 
+    if (!user) {
+      alert('User not authenticated')
+      return
+    }
+
     setSaving(true)
     try {
-      const { error } = await supabase
-        .from('templates')
-        .insert({
-          user_id: user?.id,
-          name: templateName,
-          canvas_data: canvasData,
-          excel_data: { columns: excelColumns, data: excelData, selectedSheet }
-        })
-
-      if (error) throw error
+      await googleSheetsService.createTemplate({
+        userId: user.id,
+        name: templateName,
+        canvasData: canvasData,
+        excelData: { columns: excelColumns, data: excelData, selectedSheet }
+      })
       
       alert('Template saved successfully!')
       navigate('/dashboard')
